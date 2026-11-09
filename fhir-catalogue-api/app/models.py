@@ -2,24 +2,27 @@ from pydantic import BaseModel, Field
 
 
 class SnomedCode(BaseModel):
-    code: str = Field(..., description="SNOMED CT concept identifier", example="4834000")
-    display: str = Field(..., description="Human-readable SNOMED concept name", example="Typhoid fever")
+    code: str = Field(..., description="SNOMED CT concept identifier", example="53741008")
+    display: str = Field(..., description="Human-readable SNOMED concept name", example="Coronary arteriosclerosis")
     patient_count: int | None = Field(
         None,
-        description="Number of patients in FHIR with this condition (null if count fetch failed)",
-        example=22,
+        description="Number of the dataset's member patients with this condition (null until refresh_catalogue.py has run)",
+        example=17,
     )
 
 
 class Package(BaseModel):
-    id: str = Field(..., description="AB-PMJAY Health Benefit Package code", example="MG006A")
-    label: str = Field(..., description="Clinical area label", example="Enteric Fever")
+    id: str = Field(..., description="Dataset id: the claim group name", example="DEATHCLAIMS")
+    label: str = Field(..., description="Display name", example="Deathcases")
     description: str = Field(..., description="Brief description of the package scope")
-    procedure: str = Field(..., description="Primary procedure covered", example="Antibiotic therapy")
-    procedure_snomed_code: str = Field(..., description="SNOMED CT code for the procedure", example="281789004")
-    pre_auth_ref: str = Field(..., description="Pre-authorisation reference used in FHIR claims", example="PA-MG006A")
+    procedure: str = Field(..., description="Primary procedure covered (N/A for claim-group datasets)", example="N/A")
+    procedure_snomed_code: str = Field(..., description="SNOMED CT code for the procedure (N/A for claim-group datasets)", example="N/A")
+    pre_auth_ref: str = Field(..., description="Pre-authorisation reference used in FHIR claims", example="N/A")
     snomed_code_count: int = Field(..., description="Number of SNOMED conditions in catalogue for this package")
-    bundle_count: int = Field(..., description="Total patient bundles uploaded for this package", example=125)
+    bundle_count: int = Field(..., description="Patient bundles in this dataset (the claim group's member patients)", example=66)
+    group_id: str | None = Field(None, description="FHIR Group id of the claim group behind this dataset", example="claim-group-deathclaims")
+    patient_count: int | None = Field(None, description="Member patients in the claim group", example=66)
+    claim_count: int | None = Field(None, description="Claims across the claim group's members", example=66)
 
 
 class PackageDetail(Package):
@@ -28,18 +31,18 @@ class PackageDetail(Package):
 
 class PatientRecord(BaseModel):
     patient_id: str = Field(..., description="FHIR Patient resource ID", example="6721c0cb-10e1-22ad-7729-4fb17edd3461")
-    name: str = Field(..., description="Patient full name", example="Mr. Dewey930 Glover433")
+    name: str = Field(..., description="Patient name (anonymized placeholder)", example="PATIENT_NAME_0001")
     gender: str = Field(..., description="Patient gender", example="male")
-    birth_date: str = Field(..., description="Date of birth (YYYY-MM-DD)", example="1947-11-24")
-    condition_code: str = Field(..., description="SNOMED code of the diagnosed condition", example="4834000")
-    condition_display: str = Field(..., description="Display name of the condition", example="Typhoid fever")
+    birth_date: str = Field(..., description="Year of birth (YYYY; anonymized to the year)", example="1981")
+    condition_code: str = Field(..., description="SNOMED code of the diagnosed condition", example="53741008")
+    condition_display: str = Field(..., description="Display name of the condition", example="Coronary arteriosclerosis")
     condition_status: str = Field(..., description="Clinical status of the condition", example="active")
 
 
 class PatientQueryResult(BaseModel):
-    package: str = Field(..., description="Package ID queried", example="MG006A")
-    snomed_code: str = Field(..., description="SNOMED code filtered on", example="4834000")
-    snomed_display: str = Field(..., description="Display name of the SNOMED code", example="Typhoid fever")
+    package: str = Field(..., description="Dataset (claim group) queried", example="DEATHCLAIMS")
+    snomed_code: str = Field(..., description="SNOMED code filtered on", example="53741008")
+    snomed_display: str = Field(..., description="Display name of the SNOMED code", example="Coronary arteriosclerosis")
     total: int = Field(..., description="Total number of matching patient records")
     patients: list[PatientRecord]
     raw: dict = Field(
@@ -49,18 +52,18 @@ class PatientQueryResult(BaseModel):
 
 
 class PatientMultiQuery(BaseModel):
-    package: str = Field(..., description="AB-PMJAY package ID to scope the query", example="MG006A")
+    package: str = Field(..., description="Dataset (claim group name) to scope the query to", example="DEATHCLAIMS")
     snomed_codes: list[str] = Field(
         ...,
         min_length=1,
         max_length=20,
         description="One or more SNOMED CT concept codes — all must belong to the given package",
-        example=["4834000", "302231008", "7520000"],
+        example=["53741008", "709044004"],
     )
 
 
 class PatientMultiQueryResult(BaseModel):
-    package: str = Field(..., description="Package ID queried", example="MG006A")
+    package: str = Field(..., description="Dataset (claim group) queried", example="DEATHCLAIMS")
     snomed_codes: list[str] = Field(..., description="SNOMED codes that were queried")
     invalid_codes: list[str] = Field(
         ...,
@@ -99,3 +102,49 @@ class FHIRQueryExecuteRequest(BaseModel):
         ),
         example="Patient?_has:Condition:patient:code=http://snomed.info/sct|44054006&birthdate=ge1966-01-01",
     )
+
+
+# ---------------------------------------------------------------------------
+# Claim groups
+# ---------------------------------------------------------------------------
+
+
+class ClaimGroup(BaseModel):
+    id: str = Field(..., description="FHIR Group resource id", example="claim-group-deathclaims")
+    name: str = Field(..., description="Group name", example="DEATHCLAIMS")
+    description: str = Field(..., description="What the group holds, from the Group narrative")
+    patient_count: int = Field(..., description="Number of member patients", example=66)
+    claim_count: int = Field(..., description="Number of claims across all members", example=66)
+    last_updated: str | None = Field(None, description="Group.meta.lastUpdated on the FHIR server")
+
+
+class GroupMember(BaseModel):
+    patient_id: str = Field(..., description="FHIR Patient id of the member", example="legacy-11404")
+    claim_ids: list[str] = Field(..., description="FHIR Claim ids that put this patient in the group", example=["legacy-11409"])
+
+
+class ClaimGroupMembers(BaseModel):
+    group_id: str = Field(..., example="claim-group-deathclaims")
+    group_name: str = Field(..., example="DEATHCLAIMS")
+    offset: int = Field(..., description="Index of the first member on this page", example=0)
+    limit: int = Field(..., description="Page size", example=100)
+    total: int = Field(..., description="Total members in the group", example=66)
+    has_more: bool = Field(..., description="Whether more members exist past this page")
+    members: list[GroupMember]
+
+
+class GroupMemberBundle(GroupMember):
+    bundle: dict = Field(
+        ...,
+        description="Every resource for this member (Patient/{id}/$everything), as one FHIR searchset Bundle",
+    )
+
+
+class ClaimGroupBundles(BaseModel):
+    group_id: str = Field(..., example="claim-group-deathclaims")
+    group_name: str = Field(..., example="DEATHCLAIMS")
+    offset: int = Field(..., description="Index of the first member on this page", example=0)
+    limit: int = Field(..., description="Members per page", example=10)
+    total: int = Field(..., description="Total members in the group", example=66)
+    has_more: bool = Field(..., description="Whether more members exist past this page")
+    bundles: list[GroupMemberBundle]

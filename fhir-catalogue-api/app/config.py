@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     # App metadata shown in Swagger
     app_title: str = "FHIR Package Catalogue API"
     app_description: str = (
-        "Catalogue API for NHA AB-PMJAY health benefit packages. "
-        "Browse packages, explore SNOMED-coded conditions, and retrieve patient data from HAPI FHIR."
+        "Catalogue API for the NHA AB-PMJAY claim datasets in HAPI FHIR. Datasets are claim groups "
+        "(Deathcases, NAFU): browse their SNOMED attributes, query their patients, and read every "
+        "bundle in a group."
     )
     app_version: str = "1.0.0"
 

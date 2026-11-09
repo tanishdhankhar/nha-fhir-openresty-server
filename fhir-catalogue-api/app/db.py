@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS catalogue.snomed_codes (
     PRIMARY KEY (package_id, code)
 );
 
+-- Members of the package (claim group) with a Condition coded with this
+-- SNOMED code. Filled by refresh_catalogue.py.
+ALTER TABLE catalogue.snomed_codes ADD COLUMN IF NOT EXISTS patient_count INT;
+
 CREATE TABLE IF NOT EXISTS catalogue.package_meta (
     package_id TEXT PRIMARY KEY,
     bundle_count INT NOT NULL,
@@ -52,18 +56,10 @@ def get_pool() -> asyncpg.Pool:
 
 async def fetch_snomed_codes(package_id: str) -> list[dict]:
     rows = await get_pool().fetch(
-        "SELECT code, display FROM catalogue.snomed_codes WHERE package_id = $1 ORDER BY code",
+        "SELECT code, display, patient_count FROM catalogue.snomed_codes WHERE package_id = $1 ORDER BY code",
         package_id,
     )
-    return [{"code": r["code"], "display": r["display"]} for r in rows]
-
-
-async def fetch_bundle_count(package_id: str) -> int:
-    row = await get_pool().fetchrow(
-        "SELECT bundle_count FROM catalogue.package_meta WHERE package_id = $1",
-        package_id,
-    )
-    return row["bundle_count"] if row else 0
+    return [{"code": r["code"], "display": r["display"], "patient_count": r["patient_count"]} for r in rows]
 
 
 async def replace_snomed_codes(package_id: str, codes: list[dict], bundle_count: int) -> None:

@@ -13,3 +13,6 @@ fhir_v6/
 anonymized_fhir_bundles_sep22/
 converted_anonymized_fhir_bundles_sep22/
 fhir_legacy_bundles/
+anonymized_fhir_bundles_nov09/
+fhir_bundles_nov09/
+fhir_server_backup_20261019/

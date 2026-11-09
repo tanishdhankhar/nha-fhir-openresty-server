@@ -86,3 +86,36 @@ Data Source (hospital HIS, app, etc.)
         ↓  transform to FHIR JSON
 HAPI FHIR Server  ←→  other systems (PHR apps, HIPs, HIUs)
 ```
+
+## FHIR catalogue API (`fhir-catalogue-api/`)
+
+FastAPI middleware in front of HAPI FHIR, used by omop-auth. API docs:
+
+- Swagger UI: `http://localhost:8001/docs`
+- ReDoc: `http://localhost:8001/redoc`
+- OpenAPI spec: `http://localhost:8001/openapi.json`
+
+**Datasets (`/packages`).** Each package is one claim group: `DEATHCLAIMS`
+(label "Deathcases") and `NAFU`. A package's SNOMED codes are the attributes
+found in its members' Conditions, each with how many members have it, and
+`/patients` / `/patients/query` only return that group's members. The
+attributes are computed by `refresh_catalogue.py`; re-run it after pushing
+bundles or groups:
+
+```bash
+python3 fhir-catalogue-api/refresh_catalogue.py [FHIR_BASE_URL] [DATABASE_URL]
+```
+
+Claim group endpoints (read the `DEATHCLAIMS` / `NAFU` FHIR Groups built by
+`create_claim_groups.py`):
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| `GET` | `/groups` | list claim groups with patient / claim counts |
+| `GET` | `/groups/{group_id}` | one group (FHIR id or name) |
+| `GET` | `/groups/{group_id}/members` | member patients and their claim ids, paged |
+| `GET` | `/groups/{group_id}/bundles` | one `Patient/$everything` bundle per member, paged |
+
+These endpoints do no authorization. omop-auth checks the caller holds an
+approved group grant before calling them, so don't expose this service
+directly.

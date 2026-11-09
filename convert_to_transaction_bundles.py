@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 Convert the anonymized searchset/collection bundles in
-anonymized_fhir_bundles_sep22/ into FHIR transaction bundles ready to POST
-to a server, writing them to converted_anonymized_fhir_bundles_sep22/
-(same relative layout).
+anonymized_fhir_bundles_nov09/ into FHIR transaction bundles ready to POST
+to a server, writing them to fhir_bundles_nov09/ (same relative layout).
+Then builds the DEATHCLAIMS / NAFU Group bundle and splits the output into
+fhir_bundles_nov09/DEATHCLAIMS/ and fhir_bundles_nov09/NAFU/ (see
+create_claim_groups.py).
 
 fhir_legacy_bundles/*/*.json are HAPI searchset pages: fullUrl points at the
 old server and entries carry a "search" element instead of "request". Each
@@ -23,10 +25,15 @@ Usage:
 
 import json
 import re
+import shutil
+import sys
 from pathlib import Path
 
-SOURCE_ROOT = Path("anonymized_fhir_bundles_sep22")
-OUTPUT_ROOT = Path("converted_anonymized_fhir_bundles_sep22")
+from check_patient_pii import check_dirs
+from create_claim_groups import write_group_bundle
+
+SOURCE_ROOT = Path("anonymized_fhir_bundles_nov09")
+OUTPUT_ROOT = Path("fhir_bundles_nov09")
 
 # HAPI rejects client-assigned ids that are purely numeric (they'd collide
 # with server-assigned sequential ids), so purely-numeric legacy ids get a
@@ -96,8 +103,11 @@ def convert_v6_bundle(bundle: dict) -> None:
         entry["request"] = {"method": "PUT", "url": f"{rtype}/{rid}"}
 
 
-def main() -> None:
+def main() -> int:
     total = 0
+    # Start clean: the output is split into DEATHCLAIMS/ and NAFU/ at the end,
+    # and files left from an older run would end up in the wrong folder.
+    shutil.rmtree(OUTPUT_ROOT, ignore_errors=True)
 
     legacy_files = sorted((SOURCE_ROOT / "fhir_legacy_bundles").rglob("*.json"))
     for src in legacy_files:
@@ -119,7 +129,17 @@ def main() -> None:
 
     print(f"Converted {len(legacy_files)} fhir_legacy_bundles files and {len(v6_files)} fhir_v6 files")
     print(f"-> {OUTPUT_ROOT} ({total} total)")
+    write_group_bundle(OUTPUT_ROOT)
+
+    violations = check_dirs([OUTPUT_ROOT])
+    for v in violations[:200]:
+        print(v)
+    if violations:
+        print(f"FAILED: {len(violations)} Patient PII violations in {OUTPUT_ROOT}. Do not push these bundles.")
+        return 1
+    print(f"PII check passed for {OUTPUT_ROOT}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

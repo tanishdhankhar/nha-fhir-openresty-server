@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Push the converted transaction bundles in converted_anonymized_fhir_bundles_sep22/
-to a FHIR server.
+Push the transaction bundles in fhir_bundles_nov09/ to a FHIR server.
+
+Files are under DEATHCLAIMS/ and NAFU/, each with the same layout below.
+Each group folder is pushed in turn, then claim_groups.fhir.json.
 
 fhir_legacy_bundles/ pages are uploaded in an explicit dependency order
 (Organization/Practitioner/Patient first, down to DocumentReference last)
 since they reference each other by relative id. fhir_v6/ case bundles are
 self-contained transactions (internal urn:uuid references resolve within
-each bundle) so they're uploaded in any order.
+each bundle) so they're uploaded in any order. groups/ (DEATHCLAIMS / NAFU)
+(claim_groups.fhir.json) goes last because its members reference Patients
+and Claims from the rest.
 
 Usage:
   python3 push_converted_bundles.py [FHIR_BASE_URL]
@@ -24,7 +28,7 @@ from requests.auth import HTTPBasicAuth
 
 FHIR_BASE = (sys.argv[1].rstrip("/") if len(sys.argv) > 1
              else os.environ.get("CATALOGUE_FHIR_BASE_URL", "http://localhost:8080/fhir").rstrip("/"))
-ROOT = Path("converted_anonymized_fhir_bundles_sep22")
+ROOT = Path("fhir_bundles_nov09")
 
 FHIR_USER = os.environ.get("FHIR_USERNAME") or os.environ.get("CATALOGUE_FHIR_USERNAME", "admin")
 FHIR_PASS = os.environ.get("FHIR_PASSWORD") or os.environ.get("CATALOGUE_FHIR_PASSWORD", "password")
@@ -33,6 +37,8 @@ HEADERS = {
     "Content-Type": "application/fhir+json",
     "Accept": "application/fhir+json",
 }
+
+GROUP_DIRS = ["DEATHCLAIMS", "NAFU"]
 
 LEGACY_TYPE_ORDER = [
     "Organization", "Practitioner", "Patient",
@@ -67,13 +73,12 @@ def main() -> None:
     success = 0
     failed = []
 
-    legacy_files = []
-    for rtype in LEGACY_TYPE_ORDER:
-        legacy_files.extend(sorted((ROOT / "fhir_legacy_bundles" / rtype).glob("*.json")))
-
-    v6_files = sorted((ROOT / "fhir_v6").glob("*.json"))
-
-    all_files = legacy_files + v6_files
+    all_files = []
+    for group_dir in GROUP_DIRS:
+        for rtype in LEGACY_TYPE_ORDER:
+            all_files.extend(sorted((ROOT / group_dir / "fhir_legacy_bundles" / rtype).glob("*.json")))
+        all_files.extend(sorted((ROOT / group_dir / "fhir_v6").glob("*.json")))
+    all_files.extend(sorted(ROOT.glob("claim_groups*.json")))
     total = len(all_files)
 
     for i, f in enumerate(all_files, 1):
